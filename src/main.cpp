@@ -83,23 +83,17 @@ bool post(bool exist) {
   }
   const String url = "http://" + ::address() + ":" + String(INFLUX_PORT, 10)
       + "/write?db=" + DB_NAME;
-Serial.println(url);
   HTTPClient http;
   http.begin(url.c_str());
 
   const String payload = MEASUREMENT + ",id=" + WiFi.macAddress().c_str()
     + " exist=" + (exist ? "1" : "0");
-Serial.println(payload);
   http.POST(payload);
   ::disconnectWiFi();
   return true;
 }
 
-#include <Adafruit_NeoPixel.h>
-static Adafruit_NeoPixel led(1, 2, NEO_GRB + NEO_KHZ800);
-
 void setup() {
-  Serial.begin(115200);
   ::load();
   ::pinMode(PIR_PORT, INPUT);
 }
@@ -114,16 +108,11 @@ void loop() {
   }
   auto curr = exist ? 1 : 0;
   if (curr != l_exist) {
-led.begin();
-led.setPixelColor(0, exist ? 0xff : 0);
-led.show();
-Serial.println(exist ? "OCCUPIED *******" : "VACANT *******");
     while (!::post(exist)) {
       ::delay(500);
     }
     l_exist = curr;
   }
-Serial.println("Enter sleep");
   ::esp_deep_sleep_start();
   for (;;) {}
   // never reach...
