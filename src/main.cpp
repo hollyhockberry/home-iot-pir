@@ -101,7 +101,7 @@ void setup() {
 void loop() {
   auto exist = ::digitalRead(PIR_PORT) == HIGH;
   if (exist) {
-    ::esp_sleep_enable_timer_wakeup(20 * 1000000);
+    ::esp_sleep_enable_timer_wakeup(10 * 1000000);
   } else {
     ::esp_deep_sleep_enable_gpio_wakeup(
       BIT(PIR_PORT), ESP_GPIO_WAKEUP_GPIO_HIGH);
