@@ -81,7 +81,7 @@ bool post(bool exist) {
     ::disconnectWiFi();
     return false;
   }
-  const String url = "http://" + ::address() + ":" + String(INFLUX_PORT, 10)
+  const String url = "http://" + addr + ":" + String(INFLUX_PORT, 10)
       + "/write?db=" + DB_NAME;
   HTTPClient http;
   http.begin(url.c_str());
