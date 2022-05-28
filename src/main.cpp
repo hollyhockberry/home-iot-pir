@@ -93,12 +93,22 @@ bool post(bool exist) {
   return true;
 }
 
+
+void IRAM_ATTR reset() {
+  ::esp_restart();
+}
+
 void setup() {
   ::load();
   ::pinMode(PIR_PORT, INPUT);
 }
 
 void loop() {
+  hw_timer_t* timer = ::timerBegin(0, 80, true);
+  ::timerAttachInterrupt(timer, &reset, true);
+  ::timerAlarmWrite(timer, 5000*1000, false);
+  ::timerAlarmEnable(timer);
+
   auto exist = ::digitalRead(PIR_PORT) == HIGH;
   if (exist) {
     ::esp_sleep_enable_timer_wakeup(10 * 1000000);
@@ -110,6 +120,7 @@ void loop() {
   if (curr != l_exist) {
     while (!::post(exist)) {
       ::delay(500);
+      ::timerWrite(timer, 0);
     }
     l_exist = curr;
   }
