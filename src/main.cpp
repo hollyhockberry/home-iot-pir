@@ -14,7 +14,7 @@ static int INFLUX_PORT = 8086;
 static String DB_NAME(""), MEASUREMENT("");
 
 constexpr static const int PIR_PORT = 1;
-static RTC_DATA_ATTR int l_exist = -1;
+static hw_timer_t* timer = nullptr;
 
 template<typename T>
 T Key(const char* key, const T initial, const DynamicJsonDocument& json) {
@@ -51,6 +51,9 @@ bool connectWiFi() {
   while (WiFi.status() != WL_CONNECTED) {
     ::delay(500);
   }
+  while (!MDNS.begin(WiFi.macAddress().c_str())) {
+    ::delay(100);
+  }
   return true;
 }
 
@@ -61,9 +64,6 @@ void disconnectWiFi() {
 
 String address() {
   if (!INFLUX_MDNS.equals("")) {
-    while (!MDNS.begin(WiFi.macAddress().c_str())) {
-      ::delay(100);
-    }
     return MDNS.queryHost(INFLUX_MDNS).toString();
   } else if (!INFLUX_IP.equals("")) {
     return INFLUX_IP;
@@ -72,27 +72,29 @@ String address() {
   }
 }
 
-bool post(bool exist) {
-  if (!::connectWiFi()) {
-    return false;
+static int l_exist = -1;
+
+void post(bool exist) {
+  if (l_exist == (exist ? 1 : 0)) {
+    return;
   }
   const auto addr = ::address();
   if (addr.equals("") || addr.equals("0.0.0.0")) {
-    ::disconnectWiFi();
-    return false;
+    return;
   }
-  const String url = "http://" + addr + ":" + String(INFLUX_PORT, 10)
+  const String url = "http://" + addr
+      + ":" + String(INFLUX_PORT, 10)
       + "/write?db=" + DB_NAME;
   HTTPClient http;
   http.begin(url.c_str());
 
-  const String payload = MEASUREMENT + ",id=" + WiFi.macAddress().c_str()
-    + " exist=" + (exist ? "1" : "0");
+  const String payload = MEASUREMENT + ",id="
+      + WiFi.macAddress().c_str()
+      + " exist=" + (exist ? "1" : "0");
   http.POST(payload);
-  ::disconnectWiFi();
-  return true;
-}
 
+  l_exist = exist ? 1 : 0;
+}
 
 void IRAM_ATTR reset() {
   ::esp_restart();
@@ -101,30 +103,29 @@ void IRAM_ATTR reset() {
 void setup() {
   ::load();
   ::pinMode(PIR_PORT, INPUT);
+
+  timer = ::timerBegin(0, 80, true);
+  ::timerAttachInterrupt(timer, &reset, true);
+  ::timerAlarmWrite(timer, 10*1000*1000, false);
+  ::timerAlarmEnable(timer);
+
+  if (!::connectWiFi()) {
+    ::esp_restart();
+  }
 }
 
 void loop() {
-  hw_timer_t* timer = ::timerBegin(0, 80, true);
-  ::timerAttachInterrupt(timer, &reset, true);
-  ::timerAlarmWrite(timer, 5000*1000, false);
-  ::timerAlarmEnable(timer);
+  const auto curr = ::digitalRead(PIR_PORT) == HIGH;
+  ::post(curr);
 
-  auto exist = ::digitalRead(PIR_PORT) == HIGH;
-  if (exist) {
-    ::esp_sleep_enable_timer_wakeup(10 * 1000000);
-  } else {
+  if (!curr) {
+    ::disconnectWiFi();
     ::esp_deep_sleep_enable_gpio_wakeup(
       BIT(PIR_PORT), ESP_GPIO_WAKEUP_GPIO_HIGH);
+    ::esp_deep_sleep_start();
+    for (;;) {}
+    // never reach...
   }
-  auto curr = exist ? 1 : 0;
-  if (curr != l_exist) {
-    while (!::post(exist)) {
-      ::delay(500);
-      ::timerWrite(timer, 0);
-    }
-    l_exist = curr;
-  }
-  ::esp_deep_sleep_start();
-  for (;;) {}
-  // never reach...
+  ::timerWrite(timer, 0);
+  ::delay(1000);
 }
